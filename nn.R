@@ -97,8 +97,9 @@ main <- function() {
   # Softmax classifier
   #W <- matrix(rnorm(D*K), nrow= D) * 0.01
   #b <- rep(0, K)
-  lambda <- 0.1 # Regularization constant
+  lambda <- 0.01 # Regularization coefficient
   alpha <- 0.01 # Step size
+  alpha.decay <- 0.999
   batch.size <- M/10
   maxit <- 100 * M / batch.size
   tr.loss.arr <- rep(0, maxit)
@@ -111,6 +112,7 @@ main <- function() {
     dW2.old <- 0
     db1.old <- 0
     db2.old <- 0
+    alpha <- alpha * alpha.decay
     for (batch in 1:(M / batch.size)) {
       batch.begin <- batch.size * (batch - 1) + 1
       batch.end <- batch.size * batch
@@ -150,7 +152,7 @@ main <- function() {
       # dLoss / dW1 = dLoss / dScores * W2 * dReLU / dW1 * X
       # dLoss / dW2 = dLoss / dScores * ReLU(XW1 + b) 
       dW2 <- t(hidden.layer) %*% dScores + lambda * W2
-      db2 <- rowSums(dScores)
+      db2 <- colSums(dScores)
       dHidden <- dScores %*% t(W2)
       for (i in 1:nrow(dHidden)) {
         for (j in 1:ncol(dHidden)) {
@@ -160,10 +162,10 @@ main <- function() {
         }
       }
       dW1 <- t(Xbatch) %*% dHidden + lambda * W1
-      db1 <- rowSums(dHidden)
+      db1 <- colSums(dHidden)
       
       # Apply momentum
-      momentum <- 0.9
+      momentum <- 0.5
       dW1 <- momentum * dW1.old + dW1
       dW2 <- momentum * dW2.old + dW2
       db1 <- momentum * db1.old + db1
@@ -178,7 +180,7 @@ main <- function() {
       b1 <- b1 - alpha * db1
       W2 <- W2 - alpha * dW2
       b2 <- b2 - alpha * db2
-      
+
     }
     # Train loss
     epoch.loss <- epoch.loss / (M/batch.size)
@@ -194,7 +196,7 @@ main <- function() {
     data.loss <- sum(correct.logprob) / length(yte)
     reg.loss <- 0.5 * lambda * (sum(W1 * W1) + sum(W2 * W2))
     val.loss <- data.loss + reg.loss
-    cat("Epoch ", it, ", val loss = ", val.loss,", train loss = ", epoch.loss, "\n")
+    #cat("Epoch ", it, ", val loss = ", val.loss,", train loss = ", epoch.loss, "\n")
     te.loss.arr[it] <- loss
   }
   
