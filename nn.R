@@ -1,3 +1,5 @@
+library(pracma)
+
 num.grad <- function(f, x) {
   fx <- f(x)
   grad <- rep(0, length(x))
@@ -98,21 +100,31 @@ main <- function() {
   #W <- matrix(rnorm(D*K), nrow= D) * 0.01
   #b <- rep(0, K)
   lambda <- 0.01 # Regularization coefficient
-  alpha <- 0.01 # Step size
-  alpha.decay <- 0.999
+  lr <- 0.01 # Step size
+  lr.decay <- 1
   batch.size <- M/10
+  momentum <- 0.05 # For momentum
+  decay.rate <- 0.99 # For RMSprop
+  eps <- 1e-8 # For RMSprop
   maxit <- 100 * M / batch.size
+  # Will hold training and val loss
   tr.loss.arr <- rep(0, maxit)
   te.loss.arr <- rep(0, maxit)
   
   for (it in 1:maxit) {
     randperm <- sample(1:length(ytr))
     epoch.loss <- 0
+    # For momentum
     dW1.old <- 0
     dW2.old <- 0
     db1.old <- 0
     db2.old <- 0
-    alpha <- alpha * alpha.decay
+    # For RMSprop
+    dW1.running <- matrix(0, nrow(W1), ncol(W1))
+    dW2.running <- matrix(0, nrow(W2), ncol(W2))
+    db1.running <- rep(0, length(b1))
+    db2.running <- rep(0, length(b2))
+    lr <- lr * lr.decay
     for (batch in 1:(M / batch.size)) {
       batch.begin <- batch.size * (batch - 1) + 1
       batch.end <- batch.size * batch
@@ -121,7 +133,7 @@ main <- function() {
       # NN
       hidden.layer <- relu(Xbatch %*% W1 + b1)
       scores <-  hidden.layer %*% W2 + b2 # Pass through NN
-      # Softmax
+      # Softmax classifier
       # scores <- X %*% W + b
       probs <- softmax(scores) # Softmax so the probs sum to 1
       correct.logprob <- rep(0, batch.size)
@@ -164,23 +176,37 @@ main <- function() {
       dW1 <- t(Xbatch) %*% dHidden + lambda * W1
       db1 <- colSums(dHidden)
       
+      # Apply RMSprop correction
+      dW1.running <- decay.rate * dW1.running + (1 - decay.rate) * dW1 * dW1
+      db1.running <- decay.rate * db1.running + (1 - decay.rate) * db1 * db1
+      dW2.running <- decay.rate * dW2.running + (1 - decay.rate) * dW2 * dW2
+      db2.running <- decay.rate * db2.running + (1 - decay.rate) * db2 * db2
+      dW1 <-  lr * dW1 / (sqrt(dW1.running) + eps)
+      db1 <-  lr * db1 / (sqrt(db1.running) + eps)
+      dW2 <-  lr * dW2 / (sqrt(dW2.running) + eps)
+      db2 <-  lr * db2 / (sqrt(db2.running) + eps)
+
       # Apply momentum
-      momentum <- 0.5
-      dW1 <- momentum * dW1.old + dW1
-      dW2 <- momentum * dW2.old + dW2
-      db1 <- momentum * db1.old + db1
-      db2 <- momentum * db2.old + db2
+      dW1 <- momentum * dW1.old - lr * dW1
+      dW2 <- momentum * dW2.old - lr * dW2
+      db1 <- momentum * db1.old - lr * db1
+      db2 <- momentum * db2.old - lr * db2
       dW1.old <- dW1
       dW2.old <- dW2
       db1.old <- db1
       db2.old <- db2
+
+      #Vanilla SGD
+      #dW1 <- -lr * dW1
+      #db1 <- -lr * db1
+      #dW2 <- -lr * dW2
+      #db2 <- -lr * db2
       
       # SGD step
-      W1 <- W1 - alpha * dW1
-      b1 <- b1 - alpha * db1
-      W2 <- W2 - alpha * dW2
-      b2 <- b2 - alpha * db2
-
+      W1 <- W1 + dW1
+      b1 <- b1 + db1
+      W2 <- W2 + dW2
+      b2 <- b2 + db2
     }
     # Train loss
     epoch.loss <- epoch.loss / (M/batch.size)
@@ -199,19 +225,15 @@ main <- function() {
     #cat("Epoch ", it, ", val loss = ", val.loss,", train loss = ", epoch.loss, "\n")
     te.loss.arr[it] <- loss
   }
-  
-  
   cat("Train accuracy = ", get.acc(Xtr, ytr, W1, W2, b1, b2), "\n")
   cat("Test accuracy = ", get.acc(Xte, yte, W1, W2, b1, b2), "\n")
- 
+  # Plot loss curves
   colors <- c(2, 4)
   smooth.tr.l <- movavg(tr.loss.arr, type="e", n = 50)
   smooth.te.l <- movavg(te.loss.arr, type="e", n = 50)
   plot(smooth.tr.l, type="l", col=colors[1])
   lines(smooth.te.l, col=colors[2])
   legend(x="topright",legend=c("Train loss", "Test loss"), col=colors, lty=c(1, 1), lwd=2)
-
 }
-library(pracma)
-main()
 
+main()
